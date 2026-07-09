@@ -1,0 +1,6 @@
+.venv/
+.venv312/
+__pycache__/
+*.pyc
+attachments/
+ecell_outreach.db

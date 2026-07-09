@@ -13,3 +13,7 @@ deactivate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 python -m streamlit run app.py
+
+# When the schedule is made and you think that it is correct
+
+python worker.py --once
