@@ -9,11 +9,14 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 
+
 APP_TITLE = "📬 E-Cell Outreach OS (Team)"
 TEAM_PASSCODE = "ecell2026"
 DB_PATH = "ecell_outreach.db"
 
+
 st.set_page_config(page_title=APP_TITLE, layout="wide")
+
 
 DEFAULT_TEMPLATES = {
     "initial_founder_subject": "A free consulting sprint for {{Company}} — from Ramjas's E-Cell",
@@ -108,18 +111,22 @@ Best,
 {{SenderName}}"""
 }
 
+
 STEP_ORDER = ["initial", "f1", "f2", "f3", "f4"]
 DEFAULT_GAPS = {"f1": 3, "f2": 3, "f3": 3, "f4": 3}
 STOP_STATUSES = ["Replied", "Call Booked", "Closed"]
+
 
 
 def db_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 
+
 def init_db():
     conn = db_conn()
     cur = conn.cursor()
+
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
@@ -128,6 +135,7 @@ def init_db():
         sender_phone TEXT
     )
     """)
+
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS templates (
@@ -139,6 +147,7 @@ def init_db():
         UNIQUE(user_email, template_key)
     )
     """)
+
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS schedule (
@@ -160,7 +169,9 @@ def init_db():
     )
     """)
 
+
     conn.commit()
+
 
     existing_cols = [r[1] for r in cur.execute("PRAGMA table_info(schedule)").fetchall()]
     migration_cols = {
@@ -181,8 +192,10 @@ def init_db():
         if col not in existing_cols:
             cur.execute(f"ALTER TABLE schedule ADD COLUMN {col} {col_type}")
 
+
     conn.commit()
     conn.close()
+
 
 
 def ensure_user_profile(user_email):
@@ -198,6 +211,7 @@ def ensure_user_profile(user_email):
     conn.close()
 
 
+
 def get_user_profile(user_email):
     conn = db_conn()
     cur = conn.cursor()
@@ -207,6 +221,7 @@ def get_user_profile(user_email):
     if row:
         return {"sender_name": row[0] or "Your Name", "sender_phone": row[1] or "+91 XXXXX XXXXX"}
     return {"sender_name": "Your Name", "sender_phone": "+91 XXXXX XXXXX"}
+
 
 
 def update_user_profile(user_email, sender_name, sender_phone):
@@ -220,6 +235,7 @@ def update_user_profile(user_email, sender_name, sender_phone):
     conn.close()
 
 
+
 def get_templates(user_email):
     conn = db_conn()
     cur = conn.cursor()
@@ -230,6 +246,7 @@ def get_templates(user_email):
     for k, v in rows:
         data[k] = v
     return data
+
 
 
 def save_template(user_email, template_key, template_value):
@@ -249,6 +266,7 @@ def save_template(user_email, template_key, template_value):
     conn.close()
 
 
+
 def load_schedule_df(user_email):
     conn = db_conn()
     df = pd.read_sql_query(
@@ -266,12 +284,38 @@ def load_schedule_df(user_email):
     return df
 
 
+
 def clear_schedule_for_user(user_email):
     conn = db_conn()
     cur = conn.cursor()
     cur.execute("DELETE FROM schedule WHERE user_email = ?", (user_email,))
     conn.commit()
     conn.close()
+
+
+
+def existing_emails_for_user(user_email):
+    conn = db_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT email FROM schedule WHERE user_email = ?", (user_email,))
+    rows = {r[0] for r in cur.fetchall()}
+    conn.close()
+    return rows
+
+
+
+def delete_bad_schedule_rows(user_email):
+    conn = db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM schedule WHERE user_email = ? AND scheduled_date LIKE '0001-%'",
+        (user_email,)
+    )
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
 
 
 def sanitize_template_text(text: str) -> str:
@@ -294,11 +338,13 @@ def sanitize_template_text(text: str) -> str:
     return out
 
 
+
 def render_template(text: str, data: dict) -> str:
     out = sanitize_template_text(text)
     for k, v in data.items():
         out = out.replace(f"{{{{{k}}}}}", str(v if v is not None else ""))
     return out
+
 
 
 def get_template_keys(segment: str, step: str):
@@ -307,6 +353,7 @@ def get_template_keys(segment: str, step: str):
             return "initial_founder_subject", "initial_founder_body"
         return "initial_poc_subject", "initial_poc_body"
     return f"{step}_subject", f"{step}_body"
+
 
 
 def stage_from_step(step: str):
@@ -319,8 +366,10 @@ def stage_from_step(step: str):
     }.get(step, "Not Started")
 
 
+
 def normalize_segment(value: str) -> str:
     return "Founder" if str(value).strip().lower() == "founder" else "POC"
+
 
 
 def compute_offsets(gaps: dict):
@@ -330,6 +379,7 @@ def compute_offsets(gaps: dict):
         running += int(gaps.get(step, 3))
         offsets[step] = running
     return offsets
+
 
 
 def build_rows_for_lead(lead: dict, base_date: datetime, gaps: dict, start_step: str):
@@ -351,6 +401,7 @@ def build_rows_for_lead(lead: dict, base_date: datetime, gaps: dict, start_step:
             "stage": "Not Started",
         })
     return rows
+
 
 
 def upsert_schedule_rows(user_email, rows):
@@ -384,6 +435,7 @@ def upsert_schedule_rows(user_email, rows):
     return inserted, skipped
 
 
+
 def prepare_uploaded_leads(files):
     all_frames = []
     for file in files:
@@ -410,15 +462,33 @@ def prepare_uploaded_leads(files):
     combined["company"] = combined["company"].astype(str).str.strip()
     combined["first_name"] = combined["first_name"].astype(str).str.strip()
     combined["segment"] = combined["segment"].apply(normalize_segment)
+
     if "start_step" in combined.columns:
         combined["start_step"] = combined["start_step"].astype(str).str.strip().str.lower()
         combined.loc[~combined["start_step"].isin(STEP_ORDER), "start_step"] = "initial"
     else:
         combined["start_step"] = "initial"
 
+    if "start_date" in combined.columns:
+        combined["start_date"] = combined["start_date"].astype(str).str.strip()
+    else:
+        combined["start_date"] = ""
+
     combined = combined[combined["email"] != ""].copy()
     combined = combined.drop_duplicates(subset=["email"], keep="first").reset_index(drop=True)
     return combined
+
+
+
+def safe_row_start_date(row, default_start_date):
+    raw_start_date = str(row.get("start_date", "")).strip()
+    if raw_start_date and raw_start_date.lower() not in ["nan", "nat", "none", ""]:
+        parsed_date = pd.to_datetime(raw_start_date, errors="coerce")
+        if pd.isna(parsed_date):
+            return default_start_date
+        return parsed_date.date()
+    return default_start_date
+
 
 
 def recalculate_future_rows(user_email, email, start_step, anchor_date, gaps):
@@ -483,6 +553,7 @@ def recalculate_future_rows(user_email, email, start_step, anchor_date, gaps):
     return True, f"Rebuilt future steps. Inserted: {inserted}, skipped duplicates: {skipped}"
 
 
+
 def update_schedule_row(row_id, status=None, last_sent_at=None, stage=None, notes=None):
     conn = db_conn()
     cur = conn.cursor()
@@ -507,6 +578,7 @@ def update_schedule_row(row_id, status=None, last_sent_at=None, stage=None, note
     conn.close()
 
 
+
 def bulk_update_status_by_email(user_email, selected_email, new_status, note):
     conn = db_conn()
     cur = conn.cursor()
@@ -524,6 +596,7 @@ def bulk_update_status_by_email(user_email, selected_email, new_status, note):
     )
     conn.commit()
     conn.close()
+
 
 
 def send_email_smtp(gmail_user, gmail_app_password, to_email, subject, body, from_name="E-Cell Outreach", dry_run=True, attachment_bytes=None, attachment_name=None):
@@ -552,6 +625,7 @@ def send_email_smtp(gmail_user, gmail_app_password, to_email, subject, body, fro
         return True, "Sent"
     except Exception as e:
         return False, f"{type(e).__name__}: {str(e)}"
+
 
 
 init_db()
@@ -612,6 +686,7 @@ with tab1:
     csv_files = st.file_uploader("Upload one or more CSV files", type=["csv"], accept_multiple_files=True)
     default_start_date = st.date_input("Default campaign start date", value=datetime.now().date())
     replace_mode = st.checkbox("Replace my existing schedule", value=False)
+    cleanup_bad_dates = st.checkbox("Delete old broken 0001-date rows before upload", value=True)
 
     st.markdown("### Default follow-up spacing")
     g1, g2, g3, g4 = st.columns(4)
@@ -632,22 +707,32 @@ with tab1:
                 if leads.empty:
                     st.warning("No valid leads found after cleaning the CSV files.")
                 else:
+                    if cleanup_bad_dates:
+                        deleted = delete_bad_schedule_rows(user_email)
+                        if deleted:
+                            st.info(f"Deleted {deleted} old broken schedule rows with 0001 dates.")
+
                     if replace_mode:
                         clear_schedule_for_user(user_email)
 
+                    existing_emails = set() if replace_mode else existing_emails_for_user(user_email)
                     all_rows = []
+                    skipped_existing_leads = 0
+
                     for _, row in leads.iterrows():
-                        row_start_step = row.get("start_step", default_start_step)
+                        email = str(row.get("email", "")).strip().lower()
+                        if not email:
+                            continue
+
+                        if not replace_mode and email in existing_emails:
+                            skipped_existing_leads += 1
+                            continue
+
+                        row_start_step = str(row.get("start_step", default_start_step)).strip().lower()
                         if row_start_step not in STEP_ORDER:
                             row_start_step = default_start_step
 
-                        if "start_date" in leads.columns and str(row.get("start_date", "")).strip():
-                            try:
-                                row_base_date = pd.to_datetime(row.get("start_date")).date()
-                            except Exception:
-                                row_base_date = default_start_date
-                        else:
-                            row_base_date = default_start_date
+                        row_base_date = safe_row_start_date(row, default_start_date)
 
                         all_rows.extend(
                             build_rows_for_lead(
@@ -657,9 +742,12 @@ with tab1:
                                 start_step=row_start_step,
                             )
                         )
+                        existing_emails.add(email)
 
                     inserted, skipped = upsert_schedule_rows(user_email, all_rows)
-                    st.success(f"Schedule updated. Inserted {inserted} rows, skipped {skipped} duplicate rows.")
+                    st.success(
+                        f"Schedule updated. Inserted {inserted} rows, skipped {skipped} duplicate rows, skipped {skipped_existing_leads} leads already present in the database."
+                    )
                     st.dataframe(load_schedule_df(user_email), use_container_width=True)
             except Exception as e:
                 st.error(str(e))
